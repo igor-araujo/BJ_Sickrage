@@ -65,7 +65,7 @@ class BJShareProvider(TorrentProvider):
                 return False
         
         return True
-    
+
         
     def search(self, search_params, age=0, ep_obj=None):  # pylint: disable=too-many-branches, too-many-locals
         results = []
@@ -77,13 +77,49 @@ class BJShareProvider(TorrentProvider):
                   "order_way" : "desc",
                   "order_by" :"seeders",
                   "filter_cat[2]" : "1"}
-        
-        def has_attrs_files_(tag):
-            try:
-                return tag.has_attr("id") and "files_" in tag["id"]
-            except KeyError:
-                return False
-        
+		
+        def get_show_name(html):
+            if not html:
+                return
+            
+            # Wanted show infos
+            show_info = {"Name": "",
+                         "SE" : "",
+                         "Extension" : "Formato",
+                         "Quality" : "Qualidade",
+                         "Audio" : "Codec de \xc3\x81udio",
+                         "Video" : "Codec de V\xc3\xaddeo",
+                         "Resolution" : "Resolu\xc3\xa7\xc3\xa3o"}
+
+            show_info["Name"] = re.match("(.+)(\[.+\])",
+                                         html.find_parent("div", class_="thin").find("div", class_="header").h2.text).groups()[0]
+            show_info["SE"] = html.find("a", href="#").text.split()[0]
+
+            for block in html.find_next_sibling().find_all("blockquote"):
+                for key,value in show_info.items():
+                    if re.search("{}: (.+)".format(value), block.text):
+                        show_info[key] = re.search("{}: (.+)".format(value), block.text).groups()[0]
+                        break
+
+            show_info["Video"] = re.sub("H.","x",show_info["Video"])
+
+            resolution = int(show_info["Resolution"].split("x")[-1])
+
+            if 700 <= resolution <= 740:
+                show_info["Resolution"] = "720p"
+            elif 1060 <= resolution <= 2000:
+                show_info["Resolution"] = "1080p"
+            else:
+                show_info["Resolution"] = ""
+
+            name = " ".join(_ for _ in [show_info["Name"],show_info["SE"],show_info["Resolution"],show_info["Quality"],
+                                        show_info["Video"],show_info["Extension"].lower()])
+            name = re.sub(" {1,}", ".", name)
+            name = re.sub("\.{1,}", ".", name)
+
+            return name
+
+
         for mode in search_params:
             items = []
             logger.log("Search mode: {0}".format(mode), logger.DEBUG)
@@ -130,7 +166,7 @@ class BJShareProvider(TorrentProvider):
                         if result.find("a", href="#").text.split()[0] != episode:
                             continue
 
-                        title = result.find_next_sibling().find("div", class_="filelist_path").text.replace("/","")
+                        title = get_show_name(result)
                         download_file = "{0}{1}".format(self.urls["base_url"],
                                                         result.find("a", title="Baixar").attrs["href"])
 
