@@ -1,5 +1,5 @@
 # coding=utf-8
-# Author: Niteck <niteckbj@gmail.com>
+# Author: Gabriel Bertacco <niteckbj@gmail.com>
 #
 # This file was developed as a 3rd party provider for SickRage.
 # It is not part of SickRage's oficial repository.
