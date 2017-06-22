@@ -56,8 +56,7 @@ class BJShareProvider(TorrentProvider):
         except requests.exceptions.TooManyRedirects:
             logger.log(u"Unable to connect to provider. Check your SESSION cookie", logger.WARNING)
             return False
-        
-        if not response.ok:
+        except requests.exceptions.ConnectionError:
             logger.log(u"Unable to connect to provider", logger.WARNING)
             return False
         
