@@ -16,6 +16,10 @@ from __future__ import unicode_literals
 
 import re
 import requests
+try:
+    from urllib import urlencode
+except ImportError:
+    from urllib.parse import urlencode
 from sickbeard import logger, tvcache
 from sickbeard.bs4_parser import BS4Parser
 from sickrage.helper.common import convert_size, try_int
@@ -100,13 +104,18 @@ class BJShareProvider(TorrentProvider):
             
             show_info["Video"] = re.sub("H.","x",show_info["Video"])
 
-            resolution = int(show_info["Resolution"].split("x")[0])
-
-            if 1260 <= resolution <= 1300:
-                show_info["Resolution"] = "720p"
-            elif 1900 <= resolution <= 1940:
-                show_info["Resolution"] = "1080p"
-            else:
+            try:
+                resolution = int(re.search('\d+',show_info["Resolution"]).group(0))
+    
+                if 1260 <= resolution <= 1300:
+                    show_info["Resolution"] = "720p"
+                elif 1900 <= resolution <= 1940:
+                    show_info["Resolution"] = "1080p"
+                else:
+                    show_info["Resolution"] = ""
+            except ValueError:
+                logger.log("Found an invalid show resolution: {}. Using default value (SD).".format(show_info["Resolution"]),
+                           logger.WARNING)
                 show_info["Resolution"] = ""
 
             name = " ".join(_ for _ in [show_info["Name"],extra,show_info["SE"],show_info["Resolution"],
@@ -125,19 +134,19 @@ class BJShareProvider(TorrentProvider):
                 logger.log("RSS search is not implemented yet", logger.DEBUG)
                 continue
             
-            search_url = self.urls["search"]
-            
             for search_string in search_params[mode]:
                 
                 org_str = search_string
                 try: extra_string = re.search("\(.+\)",search_string).group()
                 except: extra_string = ""
                 search_string = re.sub("\ \(.+\)", "", search_string)
-                params["searchstr"] = '+'.join([x for x in search_string.split()[:-1]])
                 episode = search_string.split()[-1]
+                params["searchstr"] = re.sub(episode,"",search_string).strip()
                 logger.log("Search string: {}".format(org_str.decode("utf-8")), logger.DEBUG)
-
-                search_url += "?"+"&".join(["{0}={1}".format(key,value) for key,value in params.items()])
+                
+                search_url = self.urls["search"]
+                search_url += "?"+urlencode(params)
+                logger.log("SEARCH URL: {}".format(search_url), logger.DEBUG)
 
                 data = self._session.get(search_url)
 
