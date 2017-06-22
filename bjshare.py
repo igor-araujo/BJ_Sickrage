@@ -16,10 +16,8 @@ from __future__ import unicode_literals
 
 import re
 import requests
-
 from sickbeard import logger, tvcache
 from sickbeard.bs4_parser import BS4Parser
-
 from sickrage.helper.common import convert_size, try_int
 from sickrage.providers.torrent.TorrentProvider import TorrentProvider
 
@@ -43,7 +41,7 @@ class BJShareProvider(TorrentProvider):
         
         self.url = self.urls['base_url']
         
-        self.cache = tvcache.TVCache(self, min_time=15)  # only poll  BJ-Share every 15 minutes max
+        self.cache = tvcache.TVCache(self, min_time=15)  # only poll BJ-Share every 15 minutes max
     
     def login(self):
         self._session = requests.session()
@@ -77,43 +75,42 @@ class BJShareProvider(TorrentProvider):
                   "order_way" : "desc",
                   "order_by" :"seeders",
                   "filter_cat[2]" : "1"}
-		
-        def get_show_name(html):
+
+        def get_show_name(html,**kwargs):
             if not html:
                 return
             
+            try: extra = kwargs.pop("extra")
+            except: extra = ""
             # Wanted show infos
-            show_info = {"Name": "",
-                         "SE" : "",
-                         "Extension" : "Formato",
-                         "Quality" : "Qualidade",
-                         "Audio" : "Codec de \xc3\x81udio",
-                         "Video" : "Codec de V\xc3\xaddeo",
-                         "Resolution" : "Resolu\xc3\xa7\xc3\xa3o"}
+            show_info = {
+                "Extension" : "Formato",
+                "Quality" : "Qualidade",
+                "Audio" : "Codec de \xc3\x81udio",
+                "Video" : "Codec de V\xc3\xaddeo",
+                "Resolution" : "Resolu\xc3\xa7\xc3\xa3o"
+            }
+            
+            for key,value in show_info.items():
+                show_info[key] = re.match('.+:\ (.*)',html.find_next("blockquote",text=re.compile("%s.*"%value)).text).groups()[0]
 
             show_info["Name"] = re.match("(.+)(\[.+\])",
                                          html.find_parent("div", class_="thin").find("div", class_="header").h2.text).groups()[0]
             show_info["SE"] = html.find("a", href="#").text.split()[0]
-
-            for block in html.find_next_sibling().find_all("blockquote"):
-                for key,value in show_info.items():
-                    if re.search("{}: (.+)".format(value), block.text):
-                        show_info[key] = re.search("{}: (.+)".format(value), block.text).groups()[0]
-                        break
-
+            
             show_info["Video"] = re.sub("H.","x",show_info["Video"])
 
-            resolution = int(show_info["Resolution"].split("x")[-1])
+            resolution = int(show_info["Resolution"].split("x")[0])
 
-            if 700 <= resolution <= 740:
+            if 1260 <= resolution <= 1300:
                 show_info["Resolution"] = "720p"
-            elif 1060 <= resolution <= 2000:
+            elif 1900 <= resolution <= 1940:
                 show_info["Resolution"] = "1080p"
             else:
                 show_info["Resolution"] = ""
 
-            name = " ".join(_ for _ in [show_info["Name"],show_info["SE"],show_info["Resolution"],show_info["Quality"],
-                                        show_info["Video"],show_info["Extension"].lower()])
+            name = " ".join(_ for _ in [show_info["Name"],extra,show_info["SE"],show_info["Resolution"],
+                                        show_info["Quality"],show_info["Video"],show_info["Extension"].lower()])
             name = re.sub(" {1,}", ".", name)
             name = re.sub("\.{1,}", ".", name)
 
@@ -132,10 +129,13 @@ class BJShareProvider(TorrentProvider):
             
             for search_string in search_params[mode]:
                 
-                search_string = re.sub("\(.+\)", "", search_string)
+                org_str = search_string
+                try: extra_string = re.search("\(.+\)",search_string).group()
+                except: extra_string = ""
+                search_string = re.sub("\ \(.+\)", "", search_string)
                 params["searchstr"] = '+'.join([x for x in search_string.split()[:-1]])
                 episode = search_string.split()[-1]
-                logger.log("Search string: {}".format(search_string.decode("utf-8")), logger.DEBUG)
+                logger.log("Search string: {}".format(org_str.decode("utf-8")), logger.DEBUG)
 
                 search_url += "?"+"&".join(["{0}={1}".format(key,value) for key,value in params.items()])
 
@@ -166,7 +166,7 @@ class BJShareProvider(TorrentProvider):
                         if result.find("a", href="#").text.split()[0] != episode:
                             continue
 
-                        title = get_show_name(result)
+                        title = get_show_name(result,extra=extra_string)
                         download_file = "{0}{1}".format(self.urls["base_url"],
                                                         result.find("a", title="Baixar").attrs["href"])
 
@@ -192,7 +192,7 @@ class BJShareProvider(TorrentProvider):
                                 'hash': ''}
 
                         logger.log("Found result: {0} with {1} seeders and {2} leechers".format
-                                   (title,seeders, leechers), logger.DEBUG)
+                                   (title, seeders, leechers), logger.DEBUG)
 
                         items.append(item)
                         
