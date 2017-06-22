@@ -102,8 +102,12 @@ class BJShareProvider(TorrentProvider):
             for key,value in show_info.items():
                 show_info[key] = re.match('.+:\ (.*)',html.find_next('blockquote',text=re.compile('%s.*'%value)).text).groups()[0]
 
-            show_info['Name'] = re.match('(.+)(\[.+\])',
-                                         html.find_parent('div', class_='thin').find('div', class_='header').h2.text).groups()[0]
+            show_info['Name'] = re.match('(.+)\ \[\d+\]',
+                                         html.find_parent('div', class_='thin').find('div', class_='header').h2.text).group(1)
+            
+            if re.match('.+\[(.+)\]', show_info['Name']):
+                show_info['Name'] = re.match('.+\[(.+)\]', show_info['Name']).group(1)
+                                         
             show_info['SE'] = html.find('a', href='#').text.split()[0]
             
             show_info['Video'] = re.sub('H.','x',show_info['Video'])
