@@ -55,8 +55,8 @@ def main(SICKRAGE_PATH):
         with open(os.path.join(PROVIDERS_PATH, "__init__.py"), "r+") as f:
             file_text = f.read()
 
-            if not re.search("from sickbeard.providers import bjshare,", file_text):
-                file_text = re.sub("from sickbeard.providers import", "from sickbeard.providers import bjshare,", file_text)
+            if not re.search("from sickbeard.providers import \(bjshare,", file_text):
+                file_text = re.sub("from sickbeard.providers import \(", "from sickbeard.providers import (bjshare, ", file_text)
             if not re.search("__all__ = \[\n    'bjshare', ", file_text):
                 file_text = re.sub("__all__ = \[\n    ", "__all__ = [\n    'bjshare', ",file_text)
 
