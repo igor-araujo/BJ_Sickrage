@@ -12,8 +12,8 @@ def main(url, port, apiKey):
         indexerid = tvshow['indexerid']
         episodes = tvshow['episodes']
         for episode in episodes:
-            season = episodio['season']
-            episodeNumber = episodio['episode']
+            season = episode['season']
+            episodeNumber = episode['episode']
             urllib.urlopen(
                 "{}/api/{}/?cmd=episode.search&indexerid={}" + \
                 "&season={}&episode={}".format(
