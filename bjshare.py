@@ -39,9 +39,9 @@ class BJShareProvider(TorrentProvider):
         self.minseed = None
         self.minleech = None
         
-        self.urls = {'base_url': "https://bj-share.me/",
-                     'login': "https://bj-share.me/login.php",
-                     'search': "https://bj-share.me/torrents.php"}
+        self.urls = {'base_url': "https://bj-share.info/",
+                     'login': "https://bj-share.info/login.php",
+                     'search': "https://bj-share.info/torrents.php"}
         
         self.url = self.urls['base_url']
         
