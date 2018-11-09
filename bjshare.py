@@ -39,9 +39,11 @@ class BJShareProvider(TorrentProvider):
         self.minseed = None
         self.minleech = None
         
-        self.urls.update = {
+        self.urls.update({
                      'login': '{base_url}/login.php'.format(**self.urls),
-                     'search': '{base_url}/torrents.php'.format(**self.urls)}
+                     'search': '{base_url}/torrents.php'.format(**self.urls),
+                     'index': '{base_url}/index.php'.format(**self.urls)
+        })
         
         self.url = self.urls['base_url']
         
@@ -64,7 +66,7 @@ class BJShareProvider(TorrentProvider):
             sickrage.app.log.warning(u"Unable to connect to provider")
             return False
         
-        response = self.session.get("https://bj-share.info/index.php").text
+        response = self.session.get(self.urls['index']).text
         
         if re.search('<title>Login :: BJ-Share</title>', response):
             sickrage.app.log.warning(u"Invalid username or password. Check your settings")
