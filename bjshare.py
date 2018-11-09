@@ -29,7 +29,7 @@ class BJShareProvider(TorrentProvider):
     def __init__(self):
         
         # Provider Init
-        TorrentProvider.__init__(self, 'BJ-Share')
+        super(BJShareProvider, self).__init__('BJ-Share',"https://bj-share.info/", True)
         
         # Credentials
         self.username = None
