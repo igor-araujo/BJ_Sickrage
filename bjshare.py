@@ -66,7 +66,7 @@ class BJShareProvider(TorrentProvider):
             sickrage.app.log.warning(u"Unable to connect to provider")
             return False
         
-        response = self.session.get(self.urls['index'])).text
+        response = self.session.get(self.urls['index']).text
         
         if re.search('<title>Login :: BJ-Share</title>', response):
             sickrage.app.log.warning(u"Invalid username or password. Check your settings")
