@@ -19,10 +19,10 @@ try:
     from urllib import urlencode    # Python3 Import
 except ImportError:
     from urllib.parse import urlencode    # Python2 Import
-from sickbeard import logger, tvcache
-from sickbeard.bs4_parser import BS4Parser
-from sickrage.helper.common import convert_size, try_int
-from sickrage.providers.torrent.TorrentProvider import TorrentProvider
+import sickrage
+from sickrage.core.caches.tv_cache import TVCache
+from sickrage.core.helpers import try_int, convert_size, bs4_parser
+from sickrage.providers import TorrentProvider
 
 class BJShareProvider(TorrentProvider):
     
@@ -45,7 +45,7 @@ class BJShareProvider(TorrentProvider):
         
         self.url = self.urls['base_url']
         
-        self.cache = tvcache.TVCache(self, min_time=15)  # only poll BJ-Share every 15 minutes max
+        self.cache = TVCache(self, min_time=15)  # only poll BJ-Share every 15 minutes max
   
     
     def login(self):
@@ -61,13 +61,13 @@ class BJShareProvider(TorrentProvider):
         }
         
         if not self.get_url(self.urls['login'], post_data=login_params, returns='text'):
-            logger.log(u"Unable to connect to provider", logger.WARNING)
+            sickrage.app.log.warning(u"Unable to connect to provider")
             return False
         
         response = self.get_url(urljoin(self.urls['base_url'],'index.php'), returns='text')
         
         if re.search('<title>Login :: BJ-Share</title>', response):
-            logger.log(u"Invalid username or password. Check your settings", logger.WARNING)
+            sickrage.app.log.warning(u"Invalid username or password. Check your settings")
             return False
         
         return True
@@ -122,8 +122,7 @@ class BJShareProvider(TorrentProvider):
                 else:
                     show_info['Resolution'] = ''
             except ValueError:
-                logger.log(u"Found an invalid show resolution: {}. Using default value (SD).".format(show_info['Resolution']),
-                           logger.WARNING)
+                sickrage.app.log.warning(u"Found an invalid show resolution: {}. Using default value (SD).".format(show_info['Resolution']))
                 show_info['Resolution'] = ''
 
             name = ' '.join(x for x in [show_info['Name'],extra,show_info['SE'],show_info['Resolution'],
@@ -135,10 +134,10 @@ class BJShareProvider(TorrentProvider):
 
         for mode in search_params:
             items = []
-            logger.log(u"Search mode: {0}".format(mode), logger.DEBUG)
+            sickrage.app.log.debug(u"Search mode: {0}".format(mode))
             
             if mode == 'RSS':
-                logger.log(u"RSS search is not implemented yet", logger.DEBUG)
+                sickrage.app.log.debug(u"RSS search is not implemented yet")
                 continue
             
             for search_string in search_params[mode]:
@@ -150,30 +149,30 @@ class BJShareProvider(TorrentProvider):
                 
                 search_string = re.sub('\ +\(.+\)', '', search_string)
                 params['searchstr'], episode = search_string.rsplit(' ',1)
-                logger.log(u"Search string: {}".format(original_str.decode('utf-8')), logger.DEBUG)
+                sickrage.app.log.debug(u"Search string: {}".format(original_str.decode('utf-8')))
                 
                 search_url = self.urls['search'] + '?' + urlencode(params)
                 data = self.get_url(search_url, returns='text')
 
-                with BS4Parser(data, 'html5lib') as html:
+                with bs4_parser(data) as html:
                     try:
                         torrent_group = html.find('div',
                                                   class_='group_info').find('a',title="View torrent group").attrs['href']
                     except AttributeError:
-                        logger.log(u"Data returned from provider does not contain any torrents", logger.DEBUG)
+                        sickrage.app.log.debug(u"Data returned from provider does not contain any torrents")
                         continue
 
                 data = self.get_url(urljoin(self.urls['base_url'], torrent_group), returns='text')
                 
                 if not data:
-                    logger.log(u"URL did not return data, maybe try a custom url, or a different one", logger.DEBUG)
+                    sickrage.app.log.debug(u"URL did not return data, maybe try a custom url, or a different one")
                     continue
                 
-                with BS4Parser(data, 'html5lib') as html:
+                with bs4_parser(data) as html:
                     torrent_table = html.find_all('tr', class_='group_torrent')
                     
                     if not torrent_table:
-                        logger.log(u"Data returned from provider does not contain any torrents", logger.DEBUG)
+                        sickrage.app.log.debug(u"Data returned from provider does not contain any torrents")
                         continue
                     
                     for result in torrent_table:
@@ -191,8 +190,8 @@ class BJShareProvider(TorrentProvider):
 
                         # Filter unseeded torrent
                         if seeders < self.minseed or leechers < self.minleech:
-                            logger.log(u"Discarding torrent because it doesn't meet the minimum seeders or leechers: "
-                                       u"{0} (S:{1} L:{2})".format(title, seeders, leechers), logger.DEBUG)
+                            sickrage.app.log.debug(u"Discarding torrent because it doesn't meet the minimum seeders or leechers: "
+                                       u"{0} (S:{1} L:{2})".format(title, seeders, leechers))
                             continue
 
                         size = convert_size(torrent_size) or -1
@@ -204,8 +203,8 @@ class BJShareProvider(TorrentProvider):
                                 'leechers': leechers,
                                 'hash': ''}
 
-                        logger.log(u"Found result: {0} with {1} seeders and {2} "
-                                   u"leechers".format(title, seeders, leechers), logger.DEBUG)
+                        sickrage.app.log.debug(u"Found result: {0} with {1} seeders and {2} "
+                                   u"leechers".format(title, seeders, leechers))
 
                         items.append(item)
                         
