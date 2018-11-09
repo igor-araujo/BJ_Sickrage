@@ -60,11 +60,11 @@ class BJShareProvider(TorrentProvider):
             'keeplogged': 0,
         }
         
-        if not self.get_url(self.urls['login'], post_data=login_params, returns='text'):
+        if not self.session.post(self.urls['login'], data=login_params).text:
             sickrage.app.log.warning(u"Unable to connect to provider")
             return False
         
-        response = self.get_url(urljoin(self.urls['base_url'],'index.php'), returns='text')
+        response = self.session.get(urljoin(self.urls['base_url'],'index.php')).text
         
         if re.search('<title>Login :: BJ-Share</title>', response):
             sickrage.app.log.warning(u"Invalid username or password. Check your settings")
@@ -152,7 +152,7 @@ class BJShareProvider(TorrentProvider):
                 sickrage.app.log.debug(u"Search string: {}".format(original_str.decode('utf-8')))
                 
                 search_url = self.urls['search'] + '?' + urlencode(params)
-                data = self.get_url(search_url, returns='text')
+                data = self.session.get(search_url).text
 
                 with bs4_parser(data) as html:
                     try:
@@ -162,7 +162,7 @@ class BJShareProvider(TorrentProvider):
                         sickrage.app.log.debug(u"Data returned from provider does not contain any torrents")
                         continue
 
-                data = self.get_url(urljoin(self.urls['base_url'], torrent_group), returns='text')
+                data = self.session.get(urljoin(self.urls['base_url'], torrent_group)).text
                 
                 if not data:
                     sickrage.app.log.debug(u"URL did not return data, maybe try a custom url, or a different one")
