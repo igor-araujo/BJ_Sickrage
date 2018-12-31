@@ -84,50 +84,57 @@ class BJShareProvider(TorrentProvider):
         params = {'searchstr': '',
                   'order_way': 'desc',
                   'order_by':'seeders',
-                  'filter_cat[2]': '1'}
+                  'filter_cat[2]': '1',
+                  'filter_cat[14]': '1'}
 
-        def get_show_name(html,**kwargs):
-            if not html:
+        def get_show_name(url,**kwargs):
+            if not url:
                 return
-            
             extra = kwargs.pop('extra', '')
             
+
             # Wanted show infos
             show_info = {
                 'Extension': "Formato",
                 'Quality': "Qualidade",
-                'Audio': "Codec de \xc3\x81udio",
-                'Video': "Codec de V\xc3\xaddeo",
-                'Resolution': "Resolu\xc3\xa7\xc3\xa3o"
+                'Audio': "Codec de \xc1udio",
+                'Video': "Codec de V\xeddeo",
+                'Resolution': "Resolu\xe7\xe3o"
             }
-            
-            for key,value in show_info.items():
-                show_info[key] = re.match('.+:\ (.*)',html.find_next('blockquote',text=re.compile('%s.*'%value)).text).groups()[0]
 
-            show_info['Name'] = re.match('(.+)\ \[\d+\]',
-                                         html.find_parent('div', class_='thin').find('div', class_='header').h2.text).group(1)
+            data = self.session.get(url).text
             
-            if re.match('.+\[(.+)\]', show_info['Name']):
-                show_info['Name'] = re.match('.+\[(.+)\]', show_info['Name']).group(1)
-                                         
-            show_info['SE'] = html.find('a', href='#').text.split()[0]
-            
-            show_info['Video'] = re.sub('H.','x',show_info['Video'])
+            with bs4_parser(data) as result:
+                html = result.find('tr',id="torrent_"+url.split("torrentid=")[1])
+                for key,value in show_info.items():
+                    
+                    show_info[key] = re.match('.+:\ (.*)',html.find_next('blockquote',text=re.compile('%s.*'%value)).text).groups()[0]
 
-            try:
-                resolution = int(re.search('\d+',show_info['Resolution']).group(0))
-    
-                if 1260 <= resolution <= 1300:
-                    show_info['Resolution'] = '720p'
-                elif 1900 <= resolution <= 1940:
-                    show_info['Resolution'] = '1080p'
-                else:
+                show_info['Name'] = re.match('(.+)\ \[\d+\]',
+                                            html.find_parent('div', class_='thin').find('div', class_='header').h2.text).group(1)
+                
+                if re.match('.+\[(.+)\]', show_info['Name']):
+                    show_info['Name'] = re.match('.+\[(.+)\]', show_info['Name']).group(1)
+                
+                if "-" in show_info['Name']:
+                    show_info['Name'] = show_info['Name'].split("-")[0].strip()
+
+                show_info['Video'] = re.sub('H.','x',show_info['Video'])
+
+                try:
+                    resolution = int(re.search('\d+',show_info['Resolution']).group(0))
+        
+                    if 1260 <= resolution <= 1300:
+                        show_info['Resolution'] = '720p'
+                    elif 1900 <= resolution <= 1940:
+                        show_info['Resolution'] = '1080p'
+                    else:
+                        show_info['Resolution'] = ''
+                except ValueError:
+                    sickrage.app.log.warning(u"Found an invalid show resolution: {}. Using default value (SD).".format(show_info['Resolution']))
                     show_info['Resolution'] = ''
-            except ValueError:
-                sickrage.app.log.warning(u"Found an invalid show resolution: {}. Using default value (SD).".format(show_info['Resolution']))
-                show_info['Resolution'] = ''
 
-            name = ' '.join(x for x in [show_info['Name'],extra,show_info['SE'],show_info['Resolution'],
+            name = ' '.join(x for x in [show_info['Name'],extra,"BJ-Share",show_info['Resolution'],
                                         show_info['Quality'],show_info['Video'],show_info['Extension'].lower()])
             name = re.sub('[\.\ ]+', '.', name)
 
@@ -148,9 +155,10 @@ class BJShareProvider(TorrentProvider):
                     extra_string = re.search('\(.+\)',search_string).group()
                 except AttributeError:
                     extra_string = ''
-                
                 search_string = re.sub('\ +\(.+\)', '', search_string)
-                params['searchstr'], episode = search_string.rsplit(' ',1)
+                text = search_string.rsplit(' ',1)
+                params['searchstr'], episode = text if mode == 'Episode' else text[:3]
+                extra_string = episode
                 sickrage.app.log.debug(u"Search string: {}".format(original_str.decode('utf-8')))
                 
                 search_url = self.urls['search'] + '?' + urlencode(params)
@@ -160,55 +168,86 @@ class BJShareProvider(TorrentProvider):
                     try:
                         torrent_group = html.find('div',
                                                   class_='group_info').find('a',title="View torrent group").attrs['href']
+                        data = self.session.get(urljoin(self.urls['base_url'], torrent_group)).text
+                
+                        if not data:
+                            sickrage.app.log.debug(u"URL did not return data, maybe try a custom url, or a different one")
+                            continue
+                        
+                        with bs4_parser(data) as html:
+                            torrent_table = html.find_all('tr', class_='group_torrent')
+                            
+                            if not torrent_table:
+                                continue
+
+                            for result in torrent_table:
+                                if result.find('a', href='#').text.split()[0] != episode:
+                                    continue                            
+                                
+                                title = get_show_name(urljoin(self.urls['base_url'], torrent_group+"?torrentid="+result["id"][7:]),extra=extra_string)
+                                download_file = urljoin(self.urls['base_url'],
+                                                        result.find('a', title='Baixar').attrs['href'])
+
+                                if not all([title, download_file]):
+                                    continue
+
+                                torrent_size, snatches, seeders, leechers = [x.text for x in result.find_all('td', class_='number_column')]
+
+                                # Filter unseeded torrent
+                                if seeders < self.minseed or leechers < self.minleech:
+                                    sickrage.app.log.debug(u"Discarding torrent because it doesn't meet the minimum seeders or leechers: "
+                                            u"{0} (S:{1} L:{2})".format(title, seeders, leechers))
+                                    continue
+
+                                size = convert_size(torrent_size) or -1
+
+                                item = {'title': title,
+                                        'link': download_file,
+                                        'size': size,
+                                        'seeders': seeders,
+                                        'leechers': leechers,
+                                        'hash': ''}
+
+                                sickrage.app.log.debug(u"Found result: {0} with {1} seeders and {2} "
+                                        u"leechers".format(title, seeders, leechers))
+
+                                items.append(item)
                     except AttributeError:
+                        torrent_table = html.find_all('tr', class_='torrent')
+                        for result in torrent_table:
+                            if episode not in result.find('a', title='View torrent').text:
+                                continue                            
+                            
+                            title = get_show_name(urljoin(self.urls['base_url'],result.find('a', title='View torrent').attrs['href'].split("#")[0]),extra=extra_string)
+                            download_file = urljoin(self.urls['base_url'],
+                                                    result.find('a', title='Baixar').attrs['href'])
+
+                            if not all([title, download_file]):
+                                continue
+
+                            torrent_size, snatches, seeders, leechers = [x.text for x in result.find_all('td', class_='number_column')]
+
+                            # Filter unseeded torrent
+                            if seeders < self.minseed or leechers < self.minleech:
+                                sickrage.app.log.debug(u"Discarding torrent because it doesn't meet the minimum seeders or leechers: "
+                                        u"{0} (S:{1} L:{2})".format(title, seeders, leechers))
+                                continue
+
+                            size = convert_size(torrent_size) or -1
+
+                            item = {'title': title,
+                                    'link': download_file,
+                                    'size': size,
+                                    'seeders': seeders,
+                                    'leechers': leechers,
+                                    'hash': ''}
+
+                            sickrage.app.log.debug(u"Found result: {0} with {1} seeders and {2} "
+                                    u"leechers".format(title, seeders, leechers))
+
+                            items.append(item)
                         sickrage.app.log.debug(u"Data returned from provider does not contain any torrents")
                         continue
-
-                data = self.session.get(urljoin(self.urls['base_url'], torrent_group)).text
-                
-                if not data:
-                    sickrage.app.log.debug(u"URL did not return data, maybe try a custom url, or a different one")
-                    continue
-                
-                with bs4_parser(data) as html:
-                    torrent_table = html.find_all('tr', class_='group_torrent')
-                    
-                    if not torrent_table:
-                        sickrage.app.log.debug(u"Data returned from provider does not contain any torrents")
-                        continue
-                    
-                    for result in torrent_table:
-                        if result.find('a', href='#').text.split()[0] != episode:
-                            continue
-
-                        title = get_show_name(result,extra=extra_string)
-                        download_file = urljoin(self.urls['base_url'],
-                                                result.find('a', title='Baixar').attrs['href'])
-
-                        if not all([title, download_file]):
-                            continue
-
-                        torrent_size, snatches, seeders, leechers = [x.text for x in result.find_all('td', class_='number_column')]
-
-                        # Filter unseeded torrent
-                        if seeders < self.minseed or leechers < self.minleech:
-                            sickrage.app.log.debug(u"Discarding torrent because it doesn't meet the minimum seeders or leechers: "
-                                       u"{0} (S:{1} L:{2})".format(title, seeders, leechers))
-                            continue
-
-                        size = convert_size(torrent_size) or -1
-
-                        item = {'title': title,
-                                'link': download_file,
-                                'size': size,
-                                'seeders': seeders,
-                                'leechers': leechers,
-                                'hash': ''}
-
-                        sickrage.app.log.debug(u"Found result: {0} with {1} seeders and {2} "
-                                   u"leechers".format(title, seeders, leechers))
-
-                        items.append(item)
                         
             items.sort(key=lambda d: try_int(d.get('seeders', 0)), reverse=True)
             results += items
